@@ -135,6 +135,12 @@
     .small-item .label{color:#A1A6B0;font-size:12px}
     .small-item .value{font-size:14px;font-weight:600;margin-top:4px}
 
+    /* 🔧 shift Unrealized PNL ~2cm to the left (label + value together) */
+    .small-item.unreal-shift{
+      transform: translateX(-2cm);
+      will-change: transform;
+    }
+
     .actions{display:flex;margin:14px 0}
     .btn{flex:1;padding:8px 0;font-size:13px;margin:0 4px;border-radius:6px;background:#323742;color:#A1A6B0}
     .btn.primary,.btn.active{background:#F3BA2F;color:#1E2128}
@@ -704,7 +710,7 @@
           <div class="label">Wallet Balance (USD)</div>
           <div class="value" id="walletValue">Loading…</div>
         </div>
-        <div class="small-item">
+        <div class="small-item unreal-shift">
           <div class="label">Unrealized PNL (USD)</div>
           <div class="value" id="unrealizedValue">Loading…</div>
         </div>
