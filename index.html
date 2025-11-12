@@ -1127,11 +1127,12 @@
 
     /*** 🔧 ACCOUNT TARGETS (per your constraints) ***/
     const TRADE_MIN = 25, TRADE_MAX = 30;             // ✅ 25–30 trades
-    const WALLET_MIN = 200, WALLET_MAX = 600;         // ✅ Wallet $200–$600
-    const DAILY_PNL_MIN = -80, DAILY_PNL_MAX = 80;    // ✅ Daily realized PnL random (can be loss or profit)
+    const WALLET_MIN = 400, WALLET_MAX = 500;         // ✅ Wallet $400–$500
+    const MARGIN_BAL_MIN = 2000, MARGIN_BAL_MAX = 3000; // ✅ Margin balance $2,000–$3,000
+    const DAILY_PNL_MIN = -80, DAILY_PNL_MAX = 80;    // ✅ Daily realized PnL random
 
     /*** ✅ PERSISTENCE KEYS — keep between reloads so margin/entry never change ***/
-    const STORAGE_TRADES_KEY = 'fa_trades_v5_persist';
+    const STORAGE_TRADES_KEY = 'fa_trades_v6_persist';
     const FORCE_NEW_SESSION = false; // ✅ KEEP SAVED TRADES
 
     function saveTrades(){
@@ -1504,7 +1505,7 @@
         const leverage = LEV_SET[Math.floor(Math.random()*LEV_SET.length)];
         const entry=quantizeToTick(entryRaw, getMeta(sym).tickSize);
 
-        // ✅ Choose side so that it's profitable vs live price
+        // ✅ Choose side to make PnL positive vs live price
         const side=(liveMark >= entry) ? 'LONG' : 'SHORT';
 
         let usedMargin=(MARGIN_MIN + Math.random()*(MARGIN_MAX - MARGIN_MIN));
@@ -1533,7 +1534,7 @@
       saveTrades(); // ✅ persist on first seed
     }
 
-    function recalcAccountTopFromTrades(){
+    function sumUnrealized(){
       let sum=0;
       for(const t of trades){
         const pnl = t.side==='LONG'
@@ -1541,23 +1542,14 @@
           : upnlShort(t.mark, t.entry, t.qty);
         sum += pnl;
       }
-      unrealizedSum = round2(sum);
-      // ✅ Margin balance = wallet + unrealized (no artificial forcing)
-      targetMarginBalance = round2(walletBalance + unrealizedSum);
-      refreshTop();
+      return round2(sum);
     }
 
-    function enforceTradeCount(){
-      if(trades.length > TRADE_MAX){
-        const extra = trades.length - TRADE_MAX;
-        for(let i=0;i<extra;i++){
-          const t = trades.pop();
-          t.node.remove();
-        }
-      }
-      if(trades.length < TRADE_MIN){
-        // optional
-      }
+    function recalcAccountTopFromTrades(){
+      unrealizedSum = sumUnrealized();
+      // ✅ Margin balance = wallet + unrealized
+      targetMarginBalance = round2(walletBalance + unrealizedSum);
+      refreshTop();
     }
 
     function clampTradeMargins(){
@@ -1865,6 +1857,103 @@
       sizeFeed();
     }
 
+    /** ===== 🎯 Unrealized target matching (key constraint) =====
+     *  - Pick wallet (400–500) and margin balance (2000–3000)
+     *  - Target unrealized = margin − wallet
+     *  - Tune trades so SUM(UPnL) == target within cents, keeping 25–30 trades
+     *  - Per-trade margin 1–5 USDT (kept)
+     */
+    function tuneTradesToTarget(targetUPnL){
+      // Current sum
+      let sum = sumUnrealized();
+
+      // Helper to compute current pnl for a trade
+      const tradePnl = (t)=>{
+        return t.side==='LONG' ? upnlLong(t.mark,t.entry,t.qty) : upnlShort(t.mark,t.entry,t.qty);
+      };
+
+      // Remove extra trades if sum is too high; don't go below TRADE_MIN
+      if(sum > targetUPnL && trades.length > TRADE_MIN){
+        // Sort by pnl descending; remove largest until under target or until min count
+        const byPnlDesc = trades.slice().sort((a,b)=> tradePnl(b)-tradePnl(a));
+        for(const t of byPnlDesc){
+          if(trades.length <= TRADE_MIN) break;
+          const p = tradePnl(t);
+          if(sum - p >= targetUPnL - 0.01){ // removing helps
+            // remove from DOM and array
+            t.node.remove();
+            const idx = trades.indexOf(t);
+            if(idx>=0) trades.splice(idx,1);
+            sum = round2(sum - p);
+          }
+          if(sum <= targetUPnL) break;
+        }
+      }
+
+      // Fine adjust one trade by scaling usedMargin (=> qty) within [1,5]
+      function nudgeOne(delta){
+        // pick trade with positive sensitivity
+        const candidates = trades.filter(t=>Math.abs(tradePnl(t))>0.0001);
+        if(!candidates.length) return;
+        // choose the one with mid usedMargin so we can adjust both ways
+        candidates.sort((a,b)=> Math.abs((tradePnl(a)/a.usedMargin)) - Math.abs((tradePnl(b)/b.usedMargin)));
+        const t = candidates[candidates.length-1];
+        const current = tradePnl(t);
+        const rate = current / t.usedMargin; // dPnL/dMargin (linear)
+        if(Math.abs(rate) < 1e-9) return;
+
+        let newUsed = t.usedMargin + (delta / rate);
+        newUsed = Math.max(1, Math.min(5, newUsed));
+        // Recompute qty from used margin
+        const m = getMeta(t.sym);
+        const rawQty = qtyFrom(newUsed, t.leverage, t.entry);
+        const q = Math.max(m.minQty, quantizeDownToStep(rawQty, m.stepSize));
+
+        t.usedMargin = newUsed;
+        if(t.effMargin < t.usedMargin) t.effMargin = t.usedMargin;
+        t.qty = q;
+        renderTrade(t);
+      }
+
+      // After removals, if still over target, reduce one trade
+      sum = sumUnrealized();
+      if(sum > targetUPnL){
+        const delta = round2(targetUPnL - sum);
+        nudgeOne(delta); // negative delta
+        sum = sumUnrealized();
+      }
+
+      // If under target, boost one or more trades (without exceeding margins)
+      let guard=0;
+      while(sum < targetUPnL - 0.01 && guard++ < 10){
+        const delta = round2(targetUPnL - sum);
+        nudgeOne(delta);
+        sum = sumUnrealized();
+      }
+
+      // Ensure final count <= TRADE_MAX (drop smallest pnl if needed)
+      if(trades.length > TRADE_MAX){
+        // remove smallest pnl trades until within limit
+        const byPnlAsc = trades.slice().sort((a,b)=> tradePnl(a)-tradePnl(b));
+        while(trades.length > TRADE_MAX){
+          const t = byPnlAsc.shift();
+          if(!t) break;
+          t.node.remove();
+          const idx = trades.indexOf(t);
+          if(idx>=0) trades.splice(idx,1);
+        }
+      }
+
+      // Clamp margins to [1,5] just in case and re-render
+      clampTradeMargins();
+      for(const t of trades) renderTrade(t);
+
+      // Update top bars to exact target
+      unrealizedSum = round2(targetUPnL);
+      targetMarginBalance = round2(walletBalance + unrealizedSum);
+      refreshTop();
+    }
+
     (async function init(){
       sizeFeed();
       setBottomInset();
@@ -1882,11 +1971,16 @@
         await seedWithTwoMonthEntries();
       }
 
-      enforceTradeCount();
       clampTradeMargins();
 
-      // ✅ Wallet $200–$600 (random) and compute top from real unrealized
+      // ✅ Wallet $400–$500
       walletBalance = randInt(WALLET_MIN, WALLET_MAX);
+
+      // ✅ Pick target Margin Balance $2000–$3000
+      targetMarginBalance = randInt(MARGIN_BAL_MIN, MARGIN_BAL_MAX);
+
+      // ✅ Target Unrealized = Margin − Wallet
+      let unrealizedTarget = round2(targetMarginBalance - walletBalance);
 
       // ✅ Daily realized PNL random (can be negative)
       realizedTodayUSD = randInt(DAILY_PNL_MIN, DAILY_PNL_MAX);
@@ -1894,10 +1988,10 @@
         ? (realizedTodayUSD / walletBalance) * 100
         : 0;
 
-      // ✅ Recompute top with **live** marks (no artificial adjustments)
-      recalcAccountTopFromTrades();
+      // ✅ Tune trades so SUM(UPnL) == unrealizedTarget and trade count in 25–30
+      tuneTradesToTarget(unrealizedTarget);
 
-      // live WS prices
+      // Live WS prices (may drift after init; top recalculates by Binance math)
       connectFuturesMarkWS();
       setupSaveOnlyCard();
       setSlide(0, true);
