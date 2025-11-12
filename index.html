@@ -860,11 +860,9 @@
                   <span class="footer-line"></span>
                   <div class="footer-content">
                     <div class="footer-left">
-                      <div>
-                        <div class="binance-badge"><img src="https://iili.io/KBDmWsn.th.png" alt=""><span class="brand">BINANCE</span></div>
-                        <div class="futures-ref">FUTURES</div>
-                        <div class="futures-ref">Referral Code 475308515</div>
-                      </div>
+                      <div class="binance-badge"><img src="https://iili.io/KBDmWsn.th.png" alt=""><span class="brand">BINANCE</span></div>
+                      <div class="futures-ref">FUTURES</div>
+                      <div class="futures-ref">Referral Code 475308515</div>
                     </div>
                     <div class="qr"><img src="https://iili.io/KiDjqxt.png" alt=""></div>
                   </div>
@@ -902,11 +900,9 @@
                   <span class="footer-line"></span>
                   <div class="footer-content">
                     <div class="footer-left">
-                      <div>
-                        <div class="binance-badge"><img src="https://iili.io/KBDmWsn.th.png" alt=""><span class="brand">BINANCE</span></div>
-                        <div class="futures-ref">FUTURES</div>
-                        <div class="futures-ref">Referral Code 475308515</div>
-                      </div>
+                      <div class="binance-badge"><img src="https://iili.io/KBDmWsn.th.png" alt=""><span class="brand">BINANCE</span></div>
+                      <div class="futures-ref">FUTURES</div>
+                      <div class="futures-ref">Referral Code 475308515</div>
                     </div>
                     <div class="qr"><img src="https://iili.io/KiDjqxt.png" alt=""></div>
                   </div>
@@ -1128,7 +1124,7 @@
     /*** 🔧 ACCOUNT TARGETS (per your constraints) ***/
     const TRADE_MIN = 25, TRADE_MAX = 30;             // ✅ 25–30 trades
     const WALLET_MIN = 400, WALLET_MAX = 500;         // ✅ Wallet $400–$500
-    const MARGIN_BAL_MIN = 2000, MARGIN_BAL_MAX = 3000; // ✅ Margin balance $2,000–$3,000
+    const MARGIN_BAL_MIN = 2800, MARGIN_BAL_MAX = 3000; // ✅ Margin balance $2,800–$3,000 (FIXED)
     const DAILY_PNL_MIN = -80, DAILY_PNL_MAX = 80;    // ✅ Daily realized PnL random
 
     /*** ✅ PERSISTENCE KEYS — keep between reloads so margin/entry never change ***/
@@ -1858,7 +1854,7 @@
     }
 
     /** ===== 🎯 Unrealized target matching (key constraint) =====
-     *  - Pick wallet (400–500) and margin balance (2000–3000)
+     *  - Pick wallet (400–500) and margin balance (2800–3000)
      *  - Target unrealized = margin − wallet
      *  - Tune trades so SUM(UPnL) == target within cents, keeping 25–30 trades
      *  - Per-trade margin 1–5 USDT (kept)
@@ -1976,7 +1972,7 @@
       // ✅ Wallet $400–$500
       walletBalance = randInt(WALLET_MIN, WALLET_MAX);
 
-      // ✅ Pick target Margin Balance $2000–$3000
+      // ✅ Pick target Margin Balance $2800–$3000 (FIXED)
       targetMarginBalance = randInt(MARGIN_BAL_MIN, MARGIN_BAL_MAX);
 
       // ✅ Target Unrealized = Margin − Wallet
