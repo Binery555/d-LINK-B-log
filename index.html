@@ -1479,8 +1479,8 @@
       );
       const entryMap=await loadTwoMonthEntryMap(poolForEntry);
 
-      // ✅ Per-trade margin range requested: $1–$5
-      const MARGIN_MIN=1, MARGIN_MAX=5;
+      // ✅ Per-trade margin range requested: $1–$10
+      const MARGIN_MIN=1, MARGIN_MAX=10;
 
       const mainList=primeSymbols.filter(
         s=>marketMeta[s]&&isFinite(markMap[s])&&isFinite(entryMap[s])
@@ -1549,10 +1549,10 @@
     }
 
     function clampTradeMargins(){
-      // ✅ Keep used margin strictly in $1–$5 range, never mutate entry
+      // ✅ Keep used margin strictly in $1–$10 range, never mutate entry
       for(const t of trades){
         if(t.usedMargin < 1) t.usedMargin = 1;
-        if(t.usedMargin > 5) t.usedMargin = 5;
+        if(t.usedMargin > 10) t.usedMargin = 10;
         if(t.effMargin < t.usedMargin) t.effMargin = t.usedMargin;
       }
     }
@@ -1855,9 +1855,9 @@
 
     /** ===== 🎯 Unrealized target matching (key constraint) =====
      *  - Pick wallet (400–500) and margin balance (2800–3000)
-     *  - Target unrealized = margin − wallet
+     *  - Target unrealized = Margin − Wallet
      *  - Tune trades so SUM(UPnL) == target within cents, keeping 25–30 trades
-     *  - Per-trade margin 1–5 USDT (kept)
+     *  - Per-trade margin 1–10 USDT (kept)
      */
     function tuneTradesToTarget(targetUPnL){
       // Current sum
@@ -1886,7 +1886,7 @@
         }
       }
 
-      // Fine adjust one trade by scaling usedMargin (=> qty) within [1,5]
+      // Fine adjust one trade by scaling usedMargin (=> qty) within [1,10]
       function nudgeOne(delta){
         // pick trade with positive sensitivity
         const candidates = trades.filter(t=>Math.abs(tradePnl(t))>0.0001);
@@ -1899,7 +1899,7 @@
         if(Math.abs(rate) < 1e-9) return;
 
         let newUsed = t.usedMargin + (delta / rate);
-        newUsed = Math.max(1, Math.min(5, newUsed));
+        newUsed = Math.max(1, Math.min(10, newUsed));
         // Recompute qty from used margin
         const m = getMeta(t.sym);
         const rawQty = qtyFrom(newUsed, t.leverage, t.entry);
@@ -1940,7 +1940,7 @@
         }
       }
 
-      // Clamp margins to [1,5] just in case and re-render
+      // Clamp margins to [1,10] just in case and re-render
       clampTradeMargins();
       for(const t of trades) renderTrade(t);
 
